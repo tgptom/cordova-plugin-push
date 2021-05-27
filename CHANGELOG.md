@@ -6,7 +6,7 @@
 
 This release contains breaking changes. One of these needed changes resolved issues of restoring the plugin from npm.
 
-With this breaking change, the `havesource-cordova-plugin-push` package name is no longer used. Please completely uninstall the old version before installing the new version. This will ensure that the correct package name `@havesource/cordova-plugin-push` is used.
+With this breaking change, the `havesource-cordova-plugin-push` package name is no longer used. Please completely uninstall the old version before installing the new version. This will ensure that the correct package name `cordova-plugin-push` is used.
 
 There is also an update to the installation requirements:
 
