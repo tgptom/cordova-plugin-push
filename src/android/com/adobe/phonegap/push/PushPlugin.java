@@ -35,7 +35,7 @@ import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.List;
 
-import me.leolin.shortcutbadger.ShortcutBadger;
+//import me.leolin.shortcutbadger.ShortcutBadger;
 
 public class PushPlugin extends CordovaPlugin implements PushConstants {
 
@@ -523,9 +523,9 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
    */
   public static void setApplicationIconBadgeNumber (Context context, int badgeCount) {
     if (badgeCount > 0) {
-      ShortcutBadger.applyCount(context, badgeCount);
+      //ShortcutBadger.applyCount(context, badgeCount);
     } else {
-      ShortcutBadger.removeCount(context);
+      //ShortcutBadger.removeCount(context);
     }
 
     SharedPreferences.Editor editor = context.getSharedPreferences(BADGE, Context.MODE_PRIVATE)

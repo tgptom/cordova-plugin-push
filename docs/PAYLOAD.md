@@ -1726,9 +1726,12 @@ fcm.send(message, function(err, response) {
 
 ## Badges
 
+Badge support temporarily removed
+<!---
 On Android not all launchers support badges. In order for us to set badges we use [ShortcutBadger](https://github.com/leolin310148/ShortcutBadger) in order to set the badge. Check out their website to see which launchers are supported.
 
 In order to set the badge number, you will need to include the `badge` property in your push payload as below:
+-->
 
 ```json
 {
