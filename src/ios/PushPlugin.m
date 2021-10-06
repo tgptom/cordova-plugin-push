@@ -197,7 +197,7 @@
 
 
             // Read GoogleService-Info.plist
-            NSString *path = [[NSBundle mainBundle] pathForResource:@"GoogleService-Info" ofType:@"plist"];
+            //NSString *path = [[NSBundle mainBundle] pathForResource:@"GoogleService-Info" ofType:@"plist"];
         
             NSLog(@"Using APNS Notification");
             
@@ -263,6 +263,7 @@
                         stringByReplacingOccurrencesOfString:@">" withString:@""]
                        stringByReplacingOccurrencesOfString: @" " withString: @""];
 #endif
+NSLog(@"Device token: %@", token);
 
 #if !TARGET_IPHONE_SIMULATOR
 
