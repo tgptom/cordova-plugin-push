@@ -21,7 +21,7 @@ public class PushInstanceIDListenerService extends FirebaseMessagingService impl
           // Get updated InstanceID token.
           String refreshedToken = instanceIdResult.getToken();
 
-          Log.d(LOG_TAG, "Refreshed token: " + refreshedToken);
+          //Log.d(LOG_TAG, "Refreshed token: " + refreshedToken);
 
           // TODO: Implement this method to send any registration to your app's servers.
           //sendRegistrationToServer(refreshedToken);
