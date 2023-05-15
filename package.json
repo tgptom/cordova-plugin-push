@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-push",
-  "version": "3.0.0-dev.0",
+  "version": "4.0.0-dev.0",
   "description": "Register and receive push notifications.",
   "scripts": {
     "build": "babel src/js --out-dir www",
@@ -11,7 +11,7 @@
     "precommit-msg": "echo 'Pre-commit checks...' && exit 0",
     "test": "npm run build && npm run lint && npm run jasmine"
   },
-  "repository": "github:havesource/cordova-plugin-push",
+  "repository": "github:tgptom/cordova-plugin-push",
   "keywords": [
     "ecosystem:cordova",
     "cordova-ios",
@@ -21,17 +21,17 @@
   ],
   "author": "Erisu",
   "license": "MIT",
-  "bugs": "https://github.com/havesource/cordova-plugin-push/issues",
-  "homepage": "https://github.com/havesource/cordova-plugin-push#readme",
+  "bugs": "https://github.com/tgptom/cordova-plugin-push/issues",
+  "homepage": "https://github.com/tgptom/cordova-plugin-push#readme",
   "devDependencies": {
-    "@babel/cli": "^7.14.8",
-    "@babel/core": "^7.14.8",
-    "@babel/eslint-parser": "^7.14.7",
-    "@babel/preset-env": "^7.14.8",
-    "@cordova/eslint-config": "^3.0.0",
+    "@babel/cli": "^7.15.4",
+    "@babel/core": "^7.15.5",
+    "@babel/eslint-parser": "^7.15.4",
+    "@babel/preset-env": "^7.15.6",
+    "@cordova/eslint-config": "^4.0.0",
     "babel-plugin-add-header-comment": "^1.0.3",
     "fs-extra": "^10.0.0",
-    "jasmine": "^3.8.0",
+    "jasmine": "^3.9.0",
     "nodemon": "^2.0.12",
     "nopt": "^5.0.0",
     "xml2js": "^0.4.23"

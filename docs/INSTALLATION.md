@@ -116,7 +116,7 @@ To make the two work together, you need to migrate your GCM project from Google 
   "cordova": {
     "plugins": {
       "cordova-plugin-push": {
-        "ANDROIDX_CORE_VERSION": "1.6.+",
+        "ANDROID_SUPPORT_V13_VERSION": "28.0.0",
         "FCM_VERSION": "18.+"
       }
     },
