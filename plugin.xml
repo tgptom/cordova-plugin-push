@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
   xmlns:android="http://schemas.android.com/apk/res/android"
-  id="cordova-plugin-push" version="4.0.0-dev.0">
+  id="cordova-plugin-push" version="4.0.0-dev.1">
 
   <name>Cordova Push Plugin</name>
   <description>Enable receiving push notifications on Android, iOS and Windows devices. Android uses Firebase Cloud Messaging. iOS uses Apple APNS Notifications. Windows uses Microsoft WNS Notifications.</description>
@@ -58,9 +58,9 @@
     <config-file target="config.xml" parent="/*">
       <preference name="AndroidXEnabled" value="true" />
       <preference name="GradlePluginGoogleServicesEnabled" value="true" />
-      <preference name="GradlePluginGoogleServicesVersion" value="4.3.10" />
+      <preference name="GradlePluginGoogleServicesVersion" value="4.4.2" />
       <preference name="GradlePluginKotlinEnabled" value="true" />
-      <preference name="GradlePluginKotlinVersion" value="1.7.10" />
+      <preference name="GradlePluginKotlinVersion" value="1.9.24" />
     </config-file>
 
     <preference name="ANDROIDX_CORE_VERSION" default="1.6.+"/>
