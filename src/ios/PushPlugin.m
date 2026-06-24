@@ -41,19 +41,6 @@
 @synthesize clearBadge;
 @synthesize handlerObj;
 
-static void pushPluginSetApplicationBadgeNumber(NSInteger badge)
-{
-    if (@available(iOS 16.0, *)) {
-        [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount:badge withCompletionHandler:^(NSError * _Nullable error) {
-            if (error) {
-                NSLog(@"PushPlugin: Error setting badge count: %@", error.localizedDescription);
-            }
-        }];
-    } else {
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:badge];
-    }
-}
-
 
 
 
