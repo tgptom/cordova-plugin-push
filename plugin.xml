@@ -14,6 +14,7 @@
 
   <engines>
     <engine name="cordova" version=">=10.0.0"/>
+    <!-- Minimums remain compatible; cordova-android 15 and cordova-ios 8 are the actively supported targets. -->
     <engine name="cordova-android" version=">=9.0.0"/>
     <engine name="cordova-ios" version=">=6.0.0"/>
   </engines>
@@ -58,12 +59,12 @@
     <config-file target="config.xml" parent="/*">
       <preference name="AndroidXEnabled" value="true" />
       <preference name="GradlePluginGoogleServicesEnabled" value="true" />
-      <preference name="GradlePluginGoogleServicesVersion" value="4.4.2" />
+      <preference name="GradlePluginGoogleServicesVersion" value="4.4.3" />
       <preference name="GradlePluginKotlinEnabled" value="true" />
-      <preference name="GradlePluginKotlinVersion" value="1.9.24" />
+      <preference name="GradlePluginKotlinVersion" value="2.1.21" />
     </config-file>
 
-    <preference name="ANDROIDX_CORE_VERSION" default="1.6.+"/>
+    <preference name="ANDROIDX_CORE_VERSION" default="1.13.+"/>
     <preference name="FCM_VERSION" default="23.+"/>
 
     <framework src="androidx.core:core:$ANDROIDX_CORE_VERSION" />

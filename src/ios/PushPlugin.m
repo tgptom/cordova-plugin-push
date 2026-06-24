@@ -41,6 +41,19 @@
 @synthesize clearBadge;
 @synthesize handlerObj;
 
+static void pushPluginSetApplicationBadgeNumber(NSInteger badge)
+{
+    if (@available(iOS 16.0, *)) {
+        [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount:badge withCompletionHandler:^(NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"PushPlugin: Error setting badge count: %@", error.localizedDescription);
+            }
+        }];
+    } else {
+        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:badge];
+    }
+}
+
 
 
 
@@ -129,7 +142,7 @@
             } else {
                 NSLog(@"PushPlugin.register: setting badge to true");
                 clearBadge = YES;
-                [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+                pushPluginSetApplicationBadgeNumber(0);
             }
             NSLog(@"PushPlugin.register: clear badge is set to %d", clearBadge);
 
@@ -405,7 +418,7 @@ NSLog(@"Device token: %@", token);
     NSMutableDictionary* options = [command.arguments objectAtIndex:0];
     int badge = [[options objectForKey:@"badge"] intValue] ?: 0;
 
-    [[UIApplication sharedApplication] setApplicationIconBadgeNumber:badge];
+    pushPluginSetApplicationBadgeNumber(badge);
 
     NSString* message = [NSString stringWithFormat:@"app badge count set to %d", badge];
     CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:message];
@@ -414,15 +427,21 @@ NSLog(@"Device token: %@", token);
 
 - (void)getApplicationIconBadgeNumber:(CDVInvokedUrlCommand *)command
 {
-    NSInteger badge = [UIApplication sharedApplication].applicationIconBadgeNumber;
-
-    CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(int)badge];
-    [self.commandDelegate sendPluginResult:commandResult callbackId:command.callbackId];
+    if (@available(iOS 17.0, *)) {
+        [[UNUserNotificationCenter currentNotificationCenter] getBadgeCountWithCompletionHandler:^(NSUInteger count) {
+            CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(int)count];
+            [self.commandDelegate sendPluginResult:commandResult callbackId:command.callbackId];
+        }];
+    } else {
+        NSInteger badge = [UIApplication sharedApplication].applicationIconBadgeNumber;
+        CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(int)badge];
+        [self.commandDelegate sendPluginResult:commandResult callbackId:command.callbackId];
+    }
 }
 
 - (void)clearAllNotifications:(CDVInvokedUrlCommand *)command
 {
-    [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+    pushPluginSetApplicationBadgeNumber(0);
 
     NSString* message = [NSString stringWithFormat:@"cleared all notifications"];
     CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:message];
@@ -558,6 +577,8 @@ NSLog(@"Device token: %@", token);
                 break;
             }
             case UNAuthorizationStatusAuthorized:
+            case UNAuthorizationStatusProvisional:
+            case UNAuthorizationStatusEphemeral:
             {
                 [self performSelectorOnMainThread:@selector(registerForRemoteNotifications)
                                        withObject:nil

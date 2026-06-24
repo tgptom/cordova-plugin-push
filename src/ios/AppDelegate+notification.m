@@ -8,12 +8,23 @@
 
 #import "AppDelegate+notification.h"
 #import "PushPlugin.h"
-#import <objc/runtime.h>
 
 static char launchNotificationKey;
 static char coldstartKey;
 NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginApplicationDidBecomeActiveNotification";
 
+static void pushPluginSetApplicationBadgeNumber(NSInteger badge)
+{
+    if (@available(iOS 16.0, *)) {
+        [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount:badge withCompletionHandler:^(NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"PushPlugin: Error setting badge count: %@", error.localizedDescription);
+            }
+        }];
+    } else {
+        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:badge];
+    }
+}
 
 @implementation AppDelegate (notification)
 
@@ -23,49 +34,25 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
 }
 
 // its dangerous to override a method from within a category.
-// Instead we will use method swizzling. we set this up in the load call.
+// Instead we will register observers in the load call once the app has launched.
 + (void)load
 {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        Class class = [self class];
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            id<UIApplicationDelegate> applicationDelegate = [UIApplication sharedApplication].delegate;
+            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+            center.delegate = (id<UNUserNotificationCenterDelegate>)applicationDelegate;
 
-        SEL originalSelector = @selector(init);
-        SEL swizzledSelector = @selector(pushPluginSwizzledInit);
-
-        Method original = class_getInstanceMethod(class, originalSelector);
-        Method swizzled = class_getInstanceMethod(class, swizzledSelector);
-
-        BOOL didAddMethod =
-        class_addMethod(class,
-                        originalSelector,
-                        method_getImplementation(swizzled),
-                        method_getTypeEncoding(swizzled));
-
-        if (didAddMethod) {
-            class_replaceMethod(class,
-                                swizzledSelector,
-                                method_getImplementation(original),
-                                method_getTypeEncoding(original));
-        } else {
-            method_exchangeImplementations(original, swizzled);
-        }
+            [[NSNotificationCenter defaultCenter] addObserver:applicationDelegate
+                                                     selector:@selector(pushPluginOnApplicationDidBecomeActive:)
+                                                         name:UIApplicationDidBecomeActiveNotification
+                                                       object:nil];
+        }];
     });
-}
-
-- (AppDelegate *)pushPluginSwizzledInit
-{
-    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-    center.delegate = self;
-
-    [[NSNotificationCenter defaultCenter]addObserver:self
-                                            selector:@selector(pushPluginOnApplicationDidBecomeActive:)
-                                                name:UIApplicationDidBecomeActiveNotification
-                                              object:nil];
-
-    // This actually calls the original init method over in AppDelegate. Equivilent to calling super
-    // on an overrided method, this is not recursive, although it appears that way. neat huh?
-    return [self pushPluginSwizzledInit];
 }
 
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
@@ -145,6 +132,8 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
                 completionHandler(NO);
                 break;
             case UNAuthorizationStatusAuthorized:
+            case UNAuthorizationStatusProvisional:
+            case UNAuthorizationStatusEphemeral:
                 completionHandler(YES);
                 break;
         }
@@ -160,16 +149,14 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
     if (![defaults boolForKey:firstLaunchKey]) {
         NSLog(@"application first launch: remove badge icon number");
         [defaults setBool:YES forKey:firstLaunchKey];
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+        pushPluginSetApplicationBadgeNumber(0);
     }
-
-    UIApplication *application = notification.object;
 
     PushPlugin *pushHandler = [self getCommandInstance:@"PushNotification"];
     if (pushHandler.clearBadge) {
         NSLog(@"PushPlugin clearing badge");
         //zero badge
-        application.applicationIconBadgeNumber = 0;
+        pushPluginSetApplicationBadgeNumber(0);
     } else {
         NSLog(@"PushPlugin skip clear badge");
     }
