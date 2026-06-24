@@ -800,7 +800,7 @@
 - (void)dealloc {
     self.previousNotification = nil;
     self.launchNotification = nil;
-    self.coldstart = nil;
+    self.coldstart = NO;
 }
 
 @end

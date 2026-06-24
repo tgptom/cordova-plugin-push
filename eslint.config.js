@@ -5,7 +5,6 @@ const browserConfig = require('@cordova/eslint-config/browser');
 
 module.exports = defineConfig([
   globalIgnores([
-    'www/push.js',
     'www/push.js'
   ]),
   ...browserConfig.map(config => ({
