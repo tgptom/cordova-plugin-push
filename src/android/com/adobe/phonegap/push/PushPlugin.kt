@@ -1,5 +1,6 @@
 package com.adobe.phonegap.push
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.Activity
@@ -7,6 +8,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentResolver
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Resources.NotFoundException
 import android.media.AudioAttributes
 import android.net.Uri
@@ -14,11 +16,13 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.messaging.FirebaseMessaging
-//import me.leolin.shortcutbadger.ShortcutBadger
+import me.leolin.shortcutbadger.ShortcutBadger
 import org.apache.cordova.*
 import org.json.JSONArray
 import org.json.JSONException
@@ -37,12 +41,15 @@ class PushPlugin : CordovaPlugin() {
     const val PREFIX_TAG: String = "cordova-plugin-push"
     private const val TAG: String = "$PREFIX_TAG (PushPlugin)"
 
+    private const val REQ_CODE_INITIALIZE_PLUGIN = 0
+
     /**
      * Is the WebView in the foreground?
      */
     var isInForeground: Boolean = false
 
     private var pushContext: CallbackContext? = null
+    private var pluginInitData: JSONArray? = null
     private var gWebView: CordovaWebView? = null
     private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
 
@@ -182,15 +189,16 @@ class PushPlugin : CordovaPlugin() {
     @JvmStatic
     fun setApplicationIconBadgeNumber(context: Context, badgeCount: Int) {
       if (badgeCount > 0) {
-        //ShortcutBadger.applyCount(context, badgeCount)
+        ShortcutBadger.applyCount(context, badgeCount)
       } else {
-        //ShortcutBadger.removeCount(context)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancelAll()
+        ShortcutBadger.removeCount(context)
       }
 
       context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
-        .edit()?.apply {
+        .edit {
           putInt(PushConstants.BADGE, badgeCount.coerceAtLeast(0))
-          apply()
         }
     }
 
@@ -299,7 +307,7 @@ class PushPlugin : CordovaPlugin() {
   private fun getNotificationChannelSound(channelData: JSONObject): Pair<Uri?, AudioAttributes?> {
     val audioAttributes = AudioAttributes.Builder()
       .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-      .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+      .setUsage(AudioAttributes.USAGE_NOTIFICATION)
       .build()
 
     val sound = channelData.optString(PushConstants.SOUND, PushConstants.SOUND_DEFAULT)
@@ -433,10 +441,15 @@ class PushPlugin : CordovaPlugin() {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute::Initialize: ($msg)"
 
+    pushContext = callbackContext
+    pluginInitData = data;
+
+    if (!checkForPostNotificationsPermission()) {
+      return
+    }
+
     cordova.threadPool.execute(Runnable {
       Log.v(TAG, formatLogMessage("Data=$data"))
-
-      pushContext = callbackContext
 
       val sharedPref = applicationContext.getSharedPreferences(
         PushConstants.COM_ADOBE_PHONEGAP_PUSH,
@@ -444,6 +457,22 @@ class PushPlugin : CordovaPlugin() {
       )
       var jo: JSONObject? = null
       var senderID: String? = null
+
+      val token: String? = try {
+        Tasks.await(FirebaseMessaging.getInstance().token)
+      } catch (e: Exception) {
+        // Catch and format all other log message to clearly declare which exception was triggered.
+        val rootCause = if (e is ExecutionException) e.cause ?: e else e
+        val exceptionType = rootCause::class.java.simpleName
+        Log.e(TAG, formatLogMessage("An \"$exceptionType\" occurred while fetching FCM token: ${rootCause.message}"))
+        callbackContext.error("An error occurred while fetching the FCM token. Check logs for details.")
+        return@Runnable
+      }
+
+      if (token.isNullOrEmpty()) {
+        callbackContext.error("The FCM token was undefined. Verify FCM configs and check logs for more information.")
+        return@Runnable
+      }
 
       try {
         jo = data.getJSONObject(0).getJSONObject(PushConstants.ANDROID)
@@ -455,53 +484,38 @@ class PushPlugin : CordovaPlugin() {
         )
         senderID = activity.getString(senderIdResId)
 
-        // If no NotificationChannels exist create the default one
+        // Creates the default notification channel if missing
         createDefaultNotificationChannelIfNeeded(jo)
 
+        // Log the JSON object and sender ID
         Log.v(TAG, formatLogMessage("JSONObject=$jo"))
         Log.v(TAG, formatLogMessage("senderID=$senderID"))
 
-        val token = try {
-          try {
-            Tasks.await(FirebaseMessaging.getInstance().token)
-          } catch (e: ExecutionException) {
-            throw e.cause ?: e
-          }
-        } catch (e: IllegalStateException) {
-          Log.e(TAG, formatLogMessage("Firebase Token Exception ${e.message}"))
-          null
-        } catch (e: ExecutionException) {
-          Log.e(TAG, formatLogMessage("Firebase Token Exception ${e.message}"))
-          null
-        } catch (e: InterruptedException) {
-          Log.e(TAG, formatLogMessage("Firebase Token Exception ${e.message}"))
-          null
+        // Prepare the registration object
+        val registration = JSONObject().put(PushConstants.REGISTRATION_ID, token).apply {
+          put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
         }
 
-        if (token != "") {
-          val registration = JSONObject().put(PushConstants.REGISTRATION_ID, token).apply {
-            put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
-          }
+        Log.v(TAG, formatLogMessage("onRegistered=$registration"))
 
-          Log.v(TAG, formatLogMessage("onRegistered=$registration"))
+        // Retrieve and subscribe to topics
+        val topics = jo.optJSONArray(PushConstants.TOPICS)
+        subscribeToTopics(topics)
 
-          val topics = jo.optJSONArray(PushConstants.TOPICS)
-          subscribeToTopics(topics)
-
-          sendEvent(registration)
-        } else {
-          callbackContext.error("Empty registration ID received from FCM")
-          return@Runnable
-        }
+        // Send the registration event
+        sendEvent(registration)
       } catch (e: JSONException) {
-        Log.e(TAG, formatLogMessage("JSON Exception ${e.message}"))
-        callbackContext.error(e.message)
+        Log.e(TAG, formatLogMessage("JSON Exception: ${e.message}"))
+        callbackContext.error("JSON Exception: ${e.message}")
       } catch (e: IOException) {
-        Log.e(TAG, formatLogMessage("IO Exception ${e.message}"))
-        callbackContext.error(e.message)
+        Log.e(TAG, formatLogMessage("IO Exception: ${e.message}"))
+        callbackContext.error("IO Exception: ${e.message}")
       } catch (e: NotFoundException) {
-        Log.e(TAG, formatLogMessage("Resources NotFoundException Exception ${e.message}"))
-        callbackContext.error(e.message)
+        Log.e(TAG, formatLogMessage("Resources NotFoundException: ${e.message}"))
+        callbackContext.error("Resources NotFoundException: ${e.message}")
+      } catch (e: Exception) {
+        Log.e(TAG, formatLogMessage("Unexpected Exception: ${e.message}"))
+        callbackContext.error("Unexpected Exception: ${e.message}")
       }
 
       jo?.let {
@@ -600,6 +614,26 @@ class PushPlugin : CordovaPlugin() {
     })
   }
 
+  private fun checkForPostNotificationsPermission(): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      if (!PermissionHelper.hasPermission(this, Manifest.permission.POST_NOTIFICATIONS)) {
+        if (ActivityCompat.shouldShowRequestPermissionRationale(
+            activity,
+            Manifest.permission.POST_NOTIFICATIONS
+          )) {
+          return false
+        }
+        PermissionHelper.requestPermission(
+          this,
+          REQ_CODE_INITIALIZE_PLUGIN,
+          Manifest.permission.POST_NOTIFICATIONS
+        )
+        return false
+      }
+    }
+    return true
+  }
+
   private fun executeActionUnregister(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute::Unregister: ($msg)"
@@ -650,6 +684,9 @@ class PushPlugin : CordovaPlugin() {
       } catch (e: InterruptedException) {
         Log.e(TAG, formatLogMessage("Interrupted ${e.message}"))
         callbackContext.error(e.message)
+      } catch (e: Exception) {
+        Log.e(TAG, formatLogMessage("Unexpected Exception ${e.message}"))
+        callbackContext.error(e.message)
       }
     }
   }
@@ -677,6 +714,8 @@ class PushPlugin : CordovaPlugin() {
       } catch (e: UnknownError) {
         callbackContext.error(e.message)
       } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      } catch (e: Exception) {
         callbackContext.error(e.message)
       }
     }
@@ -792,8 +831,7 @@ class PushPlugin : CordovaPlugin() {
   /**
    * Initialize
    */
-  override fun initialize(cordova: CordovaInterface, webView: CordovaWebView) {
-    super.initialize(cordova, webView)
+  override fun pluginInitialize() {
     isInForeground = true
   }
 
@@ -870,6 +908,31 @@ class PushPlugin : CordovaPlugin() {
     topic?.let {
       Log.d(TAG, "Unsubscribing to topic: $it")
       FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
+    }
+  }
+
+  override fun onRequestPermissionResult(
+    requestCode: Int,
+    permissions: Array<out String>?,
+    grantResults: IntArray?
+  ) {
+    super.onRequestPermissionResult(requestCode, permissions, grantResults)
+
+    for (r in grantResults!!) {
+      if (r == PackageManager.PERMISSION_DENIED) {
+        pushContext?.sendPluginResult(
+          PluginResult(
+            PluginResult.Status.ILLEGAL_ACCESS_EXCEPTION,
+            "Permission to post notifications was denied by the user"
+          )
+        )
+        return
+      }
+    }
+
+    if (requestCode == REQ_CODE_INITIALIZE_PLUGIN)
+    {
+      executeActionInitialize(pluginInitData!!, pushContext!!)
     }
   }
 }
