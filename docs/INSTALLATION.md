@@ -106,9 +106,9 @@ cordova plugin add cordova-plugin-facebook4 --variable APP_ID="App ID" --variabl
 
 Problems may arise when push plugin is used along plugins that implement Firebase functionality (e.g. `cordova-plugin-firebase-analytics`). Both plugins include a version of the FCM libraries.
 
-To make the two work together, you need to migrate your GCM project from Google console to Firebase console:
+To make the two work together:
 
-1. In Firebase console - [import your existing GCM project](https://firebase.google.com/support/guides/google-android#migrate_your_console_project), don't create a new one.
+1. If your app still uses a legacy GCM project, migrate it in Firebase console by [importing your existing project](https://firebase.google.com/support/guides/google-android#migrate_your_console_project) instead of creating a new one.
 2. Set your `FCM_VERSION` variable to match the version used in the other plugin. In case of Cordova, your `package.json` contains something like this:
 
 ```json
@@ -116,8 +116,7 @@ To make the two work together, you need to migrate your GCM project from Google 
   "cordova": {
     "plugins": {
       "cordova-plugin-push": {
-        "ANDROID_SUPPORT_V13_VERSION": "28.0.0",
-        "FCM_VERSION": "18.+"
+        "FCM_VERSION": "24.1.2"
       }
     },
     "platforms": []
@@ -125,9 +124,9 @@ To make the two work together, you need to migrate your GCM project from Google 
 }
 ```
 
-_Note:_ No changes on the back-end side are needed: [even though recommended](https://developers.google.com/cloud-messaging/android/android-migrate-fcm#update_server_endpoints), it isn't yet required and sending messages through GCM gateway should work just fine.
+_Note:_ The plugin default is `FCM_VERSION=24.1.2` (exact version). Keep this pinned to the same `firebase-messaging` version used by your other Firebase-based plugins to avoid Gradle dependency conflicts.
 
-_Note:_ The `FCM_VERSION` must be greater than or equal to 17.1.0 and less than or equal to 18.0.0.
+_Note:_ Use Firebase Cloud Messaging server endpoints for delivery. Legacy GCM server endpoints are obsolete.
 
 ### Common errors
 
@@ -221,7 +220,7 @@ To install CocoaPods, please follow the installation instructions [here](https:/
 
 If you are upgrading from an older version, it might be best to uninstall first the older version and remove the `~/.cocoapods/` directory.
 
-This plugin uses the [Firebase/Messaging](https://cocoapods.org/pods/Firebase) library.
+In this fork, iOS uses APNS only and does not include a Firebase Messaging CocoaPod dependency.
 
 #### Common CocoaPod Installation issues
 
