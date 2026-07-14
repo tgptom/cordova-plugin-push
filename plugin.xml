@@ -63,7 +63,7 @@
     </config-file>
 
     <preference name="ANDROIDX_CORE_VERSION" default="1.16.0"/>
-    <preference name="FCM_VERSION" default="24.1.0"/>
+    <preference name="FCM_VERSION" default="24.1.2"/>
 
     <framework src="androidx.core:core:$ANDROIDX_CORE_VERSION" />
     <framework src="com.google.firebase:firebase-messaging:$FCM_VERSION"/>
