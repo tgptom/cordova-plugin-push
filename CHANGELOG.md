@@ -1,5 +1,54 @@
 # Change Log
 
+## 7.0.1
+
+**Overview:**
+
+This release aligns this fork with upstream `7.0.1` while keeping fork-specific iOS APNS-only behavior.
+
+**Changed:**
+
+* sync: merged upstream updates and preserved iOS Firebase Messaging removal ([feb9827](https://github.com/tgptom/cordova-plugin-push/commit/feb98271c5d1acb7be298e376765008dad4f4945))
+* chore(android): disable ShortcutBadger integration/dependency ([aecf1b8](https://github.com/tgptom/cordova-plugin-push/commit/aecf1b8f5dfefcbc6b259f7a322dc4f699966f11))
+* chore(android): set default `FCM_VERSION` to exact `24.1.2` ([a03ec91](https://github.com/tgptom/cordova-plugin-push/commit/a03ec913358f6b6e0a2127bd35f1a201d1a904bd))
+* chore(release): align package version to `7.0.1` ([1a2ae8a](https://github.com/tgptom/cordova-plugin-push/commit/1a2ae8a3df26e7d7c4ef458e873c2935db63469a), [6757db9](https://github.com/tgptom/cordova-plugin-push/commit/6757db92019606ed9487874b04e8da884e049e5f))
+
+**Docs:**
+
+* docs(installation): removed obsolete GCM endpoint guidance and updated Firebase dependency example to `FCM_VERSION: 24.1.2` ([a03ec91](https://github.com/tgptom/cordova-plugin-push/commit/a03ec913358f6b6e0a2127bd35f1a201d1a904bd))
+* docs(installation): clarified fork behavior that iOS uses APNS only and does not include Firebase Messaging CocoaPod dependency ([a03ec91](https://github.com/tgptom/cordova-plugin-push/commit/a03ec913358f6b6e0a2127bd35f1a201d1a904bd))
+
+## 7.0.0
+
+**Requirement Changes:**
+
+* added `cordovaDependencies` release boundary for `7.0.0` in `package.json`: Cordova `>=10.0.0`, Cordova Android `>=12.0.0`, Cordova iOS `>=6.0.0` ([1a2ae8a](https://github.com/tgptom/cordova-plugin-push/commit/1a2ae8a3df26e7d7c4ef458e873c2935db63469a))
+
+## 6.0.0
+
+**Requirement Changes:**
+
+* added `cordovaDependencies` release boundary for `6.0.0` in `package.json`: Cordova `>=10.0.0`, Cordova Android `>=12.0.0`, Cordova iOS `>=6.0.0` ([1a2ae8a](https://github.com/tgptom/cordova-plugin-push/commit/1a2ae8a3df26e7d7c4ef458e873c2935db63469a))
+
+## 5.0.0
+
+**Requirement Changes:**
+
+* added `cordovaDependencies` release boundary for `5.0.0` in `package.json`: Cordova `>=10.0.0`, Cordova Android `>=12.0.0`, Cordova iOS `>=6.0.0` ([1a2ae8a](https://github.com/tgptom/cordova-plugin-push/commit/1a2ae8a3df26e7d7c4ef458e873c2935db63469a))
+
+## 4.0.0
+
+**Breaking / Requirement Changes:**
+
+* Cordova Android requirement for the 4.x line is `>=12.0.0` in current package metadata (`cordovaDependencies`) ([feb9827](https://github.com/tgptom/cordova-plugin-push/commit/feb98271c5d1acb7be298e376765008dad4f4945), [1a2ae8a](https://github.com/tgptom/cordova-plugin-push/commit/1a2ae8a3df26e7d7c4ef458e873c2935db63469a))
+* fork behavior: iOS Firebase Messaging integration was removed; iOS is APNS-only ([1e7d6b2](https://github.com/tgptom/cordova-plugin-push/commit/1e7d6b26c6acf5dcce848bebb32b20b41ebc2bbd), [feb9827](https://github.com/tgptom/cordova-plugin-push/commit/feb98271c5d1acb7be298e376765008dad4f4945))
+
+**Features & Fixes:**
+
+* feat(android): support `targetSdkVersion >= 31` (Android 12) ([#185](https://github.com/tgptom/cordova-plugin-push/pull/185))
+* fix(android): PushHandlerActivity permissions regression ([#183](https://github.com/tgptom/cordova-plugin-push/pull/183))
+* feat!(ios): update Firebase Messaging to `~> 8.1.1` before this fork's APNS-only direction ([#152](https://github.com/tgptom/cordova-plugin-push/pull/152))
+
 ## 3.0.1
 
 **Fixes:**
@@ -31,7 +80,7 @@ In this major release, there are many breaking changes to the Android platform. 
 
 ---
 
-**Libraries & Dependencie Updates and Changes:**
+**Libraries & Dependencies Updates and Changes:**
 
 * Bumped `me.leolin:ShortcutBadger@1.1.22`
 * Bumped `Google Services Gradle Plugin@4.3.8`
@@ -46,10 +95,10 @@ In this major release, there are many breaking changes to the Android platform. 
   * kotlin@1.5.20
   * add before_compile hookscript for cordova-android 9.x support
   * converted all java files to kotlin
-  * updted target-dir path for kotlin files
+  * updated target-dir path for kotlin files
   * refactored with improved null checks
   * removed some duplicated code
-  * updated logging (more logging & better tagging)¥
+  * updated logging (more logging & better tagging)
 * feat!(android): bump platform requirements (#122)
 * feat!(android): bump me.leolin:ShortcutBadger@1.1.22 (#121)
 * feat!(android): bump Google Services Gradle Plugin@4.3.8 (#120)
