@@ -611,8 +611,8 @@ class PushPlugin : CordovaPlugin() {
 
   private fun checkForPostNotificationsPermission(): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      if (!PermissionHelper.hasPermission(this, Manifest.permission.POST_NOTIFICATIONS)) {
-        PermissionHelper.requestPermission(
+      if (!cordova.hasPermission(Manifest.permission.POST_NOTIFICATIONS)) {
+        cordova.requestPermission(
           this,
           REQ_CODE_INITIALIZE_PLUGIN,
           Manifest.permission.POST_NOTIFICATIONS
@@ -900,14 +900,15 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  // Cordova Android 12-14 dispatches permission results to this legacy callback.
+  // Keep this until the minimum supported cordova-android version is 15.1.
+  @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
   override fun onRequestPermissionResult(
     requestCode: Int,
     permissions: Array<out String>?,
     grantResults: IntArray?
   ) {
-    super.onRequestPermissionResult(requestCode, permissions, grantResults)
-
-    for (r in grantResults!!) {
+    for (r in grantResults.orEmpty()) {
       if (r == PackageManager.PERMISSION_DENIED) {
         pushContext?.sendPluginResult(
           PluginResult(
@@ -919,9 +920,12 @@ class PushPlugin : CordovaPlugin() {
       }
     }
 
-    if (requestCode == REQ_CODE_INITIALIZE_PLUGIN)
-    {
-      executeActionInitialize(pluginInitData!!, pushContext!!)
+    if (requestCode == REQ_CODE_INITIALIZE_PLUGIN) {
+      val pluginInitData = pluginInitData
+      val pushContext = pushContext
+      if (pluginInitData != null && pushContext != null) {
+        executeActionInitialize(pluginInitData, pushContext)
+      }
     }
   }
 }
