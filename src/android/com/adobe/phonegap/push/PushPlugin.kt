@@ -908,7 +908,7 @@ class PushPlugin : CordovaPlugin() {
     permissions: Array<out String>?,
     grantResults: IntArray?
   ) {
-    for (r in grantResults.orEmpty()) {
+    for (r in grantResults ?: IntArray(0)) {
       if (r == PackageManager.PERMISSION_DENIED) {
         pushContext?.sendPluginResult(
           PluginResult(
