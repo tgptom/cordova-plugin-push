@@ -1194,6 +1194,6 @@ class FCMService : FirebaseMessagingService() {
   private fun isAvailableSender(from: String?): Boolean {
     val savedSenderID = pushSharedPref.getString(PushConstants.SENDER_ID, "")
     Log.d(TAG, "sender id = $savedSenderID")
-    return from == savedSenderID || from!!.startsWith("/topics/")
+    return from == savedSenderID || (from?.startsWith("/topics/") == true)
   }
 }
