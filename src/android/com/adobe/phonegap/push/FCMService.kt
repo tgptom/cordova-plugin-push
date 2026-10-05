@@ -166,7 +166,7 @@ class FCMService : FirebaseMessagingService() {
     /*
      * Change a values key in the extras bundle
      */
-    var value = extras[oldKey]
+    var value = extras.getUntyped(oldKey)
     if (value != null) {
       when (value) {
         is String -> {
@@ -313,7 +313,7 @@ class FCMService : FirebaseMessagingService() {
         key == PushConstants.MESSAGE ||
         key == messageKey
       ) {
-        val json = extras[key]
+        val json = extras.getUntyped(key)
 
         // Make sure data is in json object string format
         if (json is String && json.startsWith("{")) {
@@ -624,7 +624,7 @@ class FCMService : FirebaseMessagingService() {
         NotificationCompat.Builder(context, channelID)
       }
     } else {
-      return NotificationCompat.Builder(context)
+      return NotificationCompat.Builder(context, PushConstants.DEFAULT_CHANNEL_ID)
     }
   }
 
