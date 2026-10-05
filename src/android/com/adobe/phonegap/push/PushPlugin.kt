@@ -29,6 +29,10 @@ import java.io.IOException
 import java.util.*
 import java.util.concurrent.ExecutionException
 
+// Bundle has no public typed getter that preserves arbitrary value types.
+@Suppress("DEPRECATION")
+internal fun Bundle.getUntyped(key: String): Any? = get(key)
+
 /**
  * Cordova Plugin Push
  */
@@ -99,7 +103,7 @@ class PushPlugin : CordovaPlugin() {
 
           while (it.hasNext()) {
             val key = it.next()
-            val value = extras[key]
+            val value = extras.getUntyped(key)
 
             Log.d(TAG, "Extras Iteration: key=$key")
 
