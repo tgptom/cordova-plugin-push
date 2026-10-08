@@ -134,6 +134,8 @@
       </pods>
     </podspec>
 
+    <hook type="after_prepare" src="hooks/ios/updatePodsDeploymentTarget.js"/>
+
   </platform>
 
 </plugin>

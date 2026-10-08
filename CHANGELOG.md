@@ -7,6 +7,7 @@
 * Preserved direct APNs/VoIP registration, the modern notification/settings architecture, and existing JS notification payloads; Android and common JS implementation are unchanged.
 * Restored the documented `ios.topics` option (`ios.fcmTopics` remains an alias). Topic operations now report errors when FCM is unavailable rather than returning a misleading success.
 * Added iOS Firebase/APNs setup, deployment requirements, migration caveats and device verification steps to the installation guide.
+* Added an iOS `after_prepare` hook that raises all CocoaPods targets (including `*_Privacy` resource bundles) to at least the app deployment target (minimum `15.0`), fixing Xcode errors for Firebase pods that declare `9.0`/`12.0`.
 
 ## 7.0.1
 
