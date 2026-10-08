@@ -50,6 +50,7 @@
 @property (nonatomic, assign) NSUInteger registrationGeneration;
 @property (nonatomic, copy) NSString *lastFCMToken;
 @property (nonatomic, strong) NSMutableSet<NSString *> *fcmTopics;
+@property (nonatomic, strong) NSCountedSet<NSString *> *pendingTopicUnsubscriptions;
 
 @property (nonatomic, copy) void (^backgroundTaskcompletionHandler)(UIBackgroundFetchResult);
 
@@ -117,13 +118,18 @@
         NSUInteger generation = self.registrationGeneration;
         __block NSError *topicError = nil;
         for (NSString *topic in topics) {
+            NSString *name = [self normalizedTopic:topic];
+            [self.pendingTopicUnsubscriptions addObject:name];
             dispatch_group_enter(group);
-            [[FIRMessaging messaging] unsubscribeFromTopic:[self normalizedTopic:topic] completion:^(NSError *error) {
+            [[FIRMessaging messaging] unsubscribeFromTopic:name completion:^(NSError *error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    if (generation == self.registrationGeneration) {
+                        [self.pendingTopicUnsubscriptions removeObject:name];
+                    }
                     if (error) {
                         topicError = error;
                     } else if (generation == self.registrationGeneration) {
-                        [self.fcmTopics removeObject:[self normalizedTopic:topic]];
+                        [self.fcmTopics removeObject:name];
                     }
                     dispatch_group_leave(group);
                 });
@@ -195,8 +201,14 @@
         return;
     }
     NSUInteger generation = self.registrationGeneration;
+    if (!subscribe) {
+        [self.pendingTopicUnsubscriptions addObject:topic];
+    }
     void (^completion)(NSError *) = ^(NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (!subscribe && generation == self.registrationGeneration) {
+                [self.pendingTopicUnsubscriptions removeObject:topic];
+            }
             if (error) {
                 [self failWithMessage:command.callbackId withMsg:@"Unable to update FCM topic subscription." withError:error];
             } else {
@@ -236,6 +248,7 @@
     self.fcmEnabled = self.firebaseConfigured && ![settings voipEnabled];
     if (self.fcmEnabled) {
         self.fcmTopics = [NSMutableSet set];
+        self.pendingTopicUnsubscriptions = [NSCountedSet set];
         for (id topic in settings.fcmTopics) {
             NSString *name = [self normalizedTopic:topic];
             if (name) {
@@ -363,6 +376,10 @@
     self.lastFCMToken = token;
     [self registerWithToken:token];
     for (NSString *name in self.fcmTopics) {
+        // Do not queue a subscribe behind an unsubscribe that is still in flight.
+        if ([self.pendingTopicUnsubscriptions containsObject:name]) {
+            continue;
+        }
         NSUInteger generation = self.registrationGeneration;
         [[FIRMessaging messaging] subscribeToTopic:name completion:^(NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -809,7 +826,7 @@
 
 - (void)recordFCMMessage:(NSDictionary *)userInfo {
     id proxyEnabled = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"FirebaseAppDelegateProxyEnabled"];
-    if (self.fcmEnabled && proxyEnabled && ![proxyEnabled boolValue]) {
+    if (self.firebaseConfigured && proxyEnabled && ![proxyEnabled boolValue]) {
         [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
     }
 }
