@@ -276,6 +276,26 @@ If you are upgrading from an older version, it might be best to uninstall first 
 
 The plugin links the `FirebaseMessaging` pod (including its FirebaseCore dependency) using `IOS_FIREBASE_MESSAGING_VERSION`. Runtime Firebase configuration remains optional; see [iOS FCM setup](#ios-fcm-setup).
 
+#### Pods deployment target
+
+Some transitive Firebase pods (e.g. `PromisesObjC`, `GoogleUtilities`, `GoogleDataTransport`, `nanopb` and their `*_Privacy` resource bundles) declare deployment targets as low as `9.0`/`12.0`, which recent Xcode versions reject (`The iOS Simulator deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 12.0, but the range of supported deployment target versions is 15.0 to ...`).
+
+To avoid manual edits, the plugin runs an iOS `after_prepare` hook (`hooks/ios/updatePodsDeploymentTarget.js`) that:
+
+- resolves the deployment target from the `deployment-target` preference in `config.xml` (falling back to the Podfile `platform :ios` line), raising anything lower than `15.0` to `15.0`;
+- adds a marked block to the `post_install` hook of `platforms/ios/Podfile` (merging into an existing `post_install` instead of adding a second one) that raises every pod target, including resource bundle targets, to at least that version on every `pod install`;
+- raises the same setting in the already generated `platforms/ios/Pods/*.xcodeproj` so no extra `pod install` is needed.
+
+The hook is idempotent and re-applies itself after every `cordova prepare`/`build`, including after cordova-ios regenerates the Podfile (platform re-add, plugin add/remove). Higher pod or app targets are kept unchanged. It's still recommended to also set the app's own target:
+
+```xml
+<platform name="ios">
+    <preference name="deployment-target" value="15.0" />
+</platform>
+```
+
+To verify, run `cordova prepare ios` and check that `platforms/ios/Podfile` contains the `cordova-plugin-push: pods deployment target` block once, and that no `IPHONEOS_DEPLOYMENT_TARGET` below `15.0` remains in `platforms/ios/Pods/Pods.xcodeproj/project.pbxproj`.
+
 #### Common CocoaPod Installation issues
 
 If you are attempting to install this plugin and you run into this error:
