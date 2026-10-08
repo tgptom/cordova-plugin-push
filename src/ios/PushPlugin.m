@@ -26,8 +26,10 @@
 #import "PushPlugin.h"
 #import "PushPluginConstants.h"
 #import "PushPluginSettings.h"
+#import <FirebaseCore/FirebaseCore.h>
+#import <FirebaseMessaging/FirebaseMessaging.h>
 
-@interface PushPlugin ()
+@interface PushPlugin () <FIRMessagingDelegate>
 
 @property (nonatomic, strong) NSDictionary *launchNotification;
 @property (nonatomic, strong) NSDictionary *notificationMessage;
@@ -40,6 +42,14 @@
 @property (nonatomic, assign) BOOL forceShow;
 @property (nonatomic, assign) BOOL forceRegister;
 @property (nonatomic, assign) BOOL coldstart;
+@property (nonatomic, assign) BOOL firebaseConfigured;
+@property (nonatomic, assign) BOOL fcmEnabled;
+@property (nonatomic, assign) BOOL registrationActive;
+@property (nonatomic, assign) BOOL apnsRegistered;
+@property (nonatomic, assign) BOOL unregistering;
+@property (nonatomic, assign) NSUInteger registrationGeneration;
+@property (nonatomic, copy) NSString *lastFCMToken;
+@property (nonatomic, strong) NSMutableSet<NSString *> *fcmTopics;
 
 @property (nonatomic, copy) void (^backgroundTaskcompletionHandler)(UIBackgroundFetchResult);
 
@@ -50,6 +60,11 @@
 @synthesize callbackId;
 
 - (void)pluginInitialize {
+    if (![FIRApp defaultApp] && [[NSBundle mainBundle] pathForResource:@"GoogleService-Info" ofType:@"plist"]) {
+        [FIRApp configure];
+    }
+    self.firebaseConfigured = [FIRApp defaultApp] != nil;
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(didRegisterForRemoteNotificationsWithDeviceToken:)
                                                  name:PluginDidRegisterForRemoteNotificationsWithDeviceToken
@@ -82,26 +97,158 @@
 }
 
 - (void)unregister:(CDVInvokedUrlCommand *)command {
+    if (self.unregistering) {
+        [self failWithMessage:command.callbackId withMsg:@"FCM unregister is still in progress." withError:nil];
+        return;
+    }
+    id topics = command.arguments.firstObject;
+    if ([topics isKindOfClass:[NSArray class]]) {
+        if (!self.fcmEnabled || !self.registrationActive) {
+            [self failWithMessage:command.callbackId withMsg:@"FCM is not enabled on iOS." withError:nil];
+            return;
+        }
+        for (id topic in topics) {
+            if (![self normalizedTopic:topic]) {
+                [self failWithMessage:command.callbackId withMsg:@"Invalid FCM topic." withError:nil];
+                return;
+            }
+        }
+        dispatch_group_t group = dispatch_group_create();
+        NSUInteger generation = self.registrationGeneration;
+        __block NSError *topicError = nil;
+        for (NSString *topic in topics) {
+            dispatch_group_enter(group);
+            [[FIRMessaging messaging] unsubscribeFromTopic:[self normalizedTopic:topic] completion:^(NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (error) {
+                        topicError = error;
+                    } else if (generation == self.registrationGeneration) {
+                        [self.fcmTopics removeObject:[self normalizedTopic:topic]];
+                    }
+                    dispatch_group_leave(group);
+                });
+            }];
+        }
+        dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+            if (topicError) {
+                [self failWithMessage:command.callbackId withMsg:@"Unable to unsubscribe from FCM topics." withError:topicError];
+            } else {
+                [self successWithMessage:command.callbackId withMsg:@"unsubscribed"];
+            }
+        });
+        return;
+    }
+    if (topics && ![topics isKindOfClass:[NSNull class]]) {
+        [self failWithMessage:command.callbackId withMsg:@"Topics must be an array." withError:nil];
+        return;
+    }
+    self.registrationActive = NO;
+    self.registrationGeneration++;
+    if (self.fcmEnabled) {
+        FIRMessaging *messaging = [FIRMessaging messaging];
+        self.unregistering = YES;
+        messaging.autoInitEnabled = NO;
+        [messaging deleteTokenWithCompletion:^(NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.unregistering = NO;
+                if (error) {
+                    self.registrationActive = YES;
+                    messaging.autoInitEnabled = YES;
+                    [self failWithMessage:command.callbackId withMsg:@"Unable to delete FCM token." withError:error];
+                } else {
+                    self.lastFCMToken = nil;
+                    [[UIApplication sharedApplication] unregisterForRemoteNotifications];
+                    [self successWithMessage:command.callbackId withMsg:@"unregistered"];
+                }
+            });
+        }];
+        return;
+    }
     [[UIApplication sharedApplication] unregisterForRemoteNotifications];
     [self successWithMessage:command.callbackId withMsg:@"unregistered"];
 }
 
 - (void)subscribe:(CDVInvokedUrlCommand *)command {
-    NSLog(@"[PushPlugin] The 'subscribe' API is not supported on iOS (FCM not enabled).");
-    [self successWithMessage:command.callbackId withMsg:@"The 'subscribe' API is not supported on iOS."];
+    [self updateTopic:command subscribe:YES];
 }
 
 - (void)unsubscribe:(CDVInvokedUrlCommand *)command {
-    NSLog(@"[PushPlugin] The 'unsubscribe' API is not supported on iOS (FCM not enabled).");
-    [self successWithMessage:command.callbackId withMsg:@"The 'unsubscribe' API is not supported on iOS."];
+    [self updateTopic:command subscribe:NO];
+}
+
+- (NSString *)normalizedTopic:(id)topic {
+    if (![topic isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+    NSString *name = [topic hasPrefix:@"/topics/"] ? [topic substringFromIndex:8] : topic;
+    return [[NSPredicate predicateWithFormat:@"SELF MATCHES %@", @"[a-zA-Z0-9\\-_.~%]+"] evaluateWithObject:name] ? name : nil;
+}
+
+- (void)updateTopic:(CDVInvokedUrlCommand *)command subscribe:(BOOL)subscribe {
+    if (!self.fcmEnabled || !self.registrationActive) {
+        [self failWithMessage:command.callbackId withMsg:@"FCM is not enabled on iOS." withError:nil];
+        return;
+    }
+    NSString *topic = [self normalizedTopic:command.arguments.firstObject];
+    if (!topic) {
+        [self failWithMessage:command.callbackId withMsg:@"Invalid FCM topic." withError:nil];
+        return;
+    }
+    NSUInteger generation = self.registrationGeneration;
+    void (^completion)(NSError *) = ^(NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                [self failWithMessage:command.callbackId withMsg:@"Unable to update FCM topic subscription." withError:error];
+            } else {
+                if (generation == self.registrationGeneration) {
+                    if (subscribe) {
+                        [self.fcmTopics addObject:topic];
+                    } else {
+                        [self.fcmTopics removeObject:topic];
+                    }
+                }
+                [self successWithMessage:command.callbackId withMsg:subscribe ? @"subscribed" : @"unsubscribed"];
+            }
+        });
+    };
+    if (subscribe) {
+        [[FIRMessaging messaging] subscribeToTopic:topic completion:completion];
+    } else {
+        [[FIRMessaging messaging] unsubscribeFromTopic:topic completion:completion];
+    }
 }
 
 - (void)init:(CDVInvokedUrlCommand *)command {
+    if (self.unregistering) {
+        [self failWithMessage:command.callbackId withMsg:@"Wait for FCM unregister to complete before calling init." withError:nil];
+        return;
+    }
     NSMutableDictionary* options = [command.arguments objectAtIndex:0];
     [[PushPluginSettings sharedInstance] updateSettingsWithOptions:[options objectForKey:@"ios"]];
     PushPluginSettings *settings = [PushPluginSettings sharedInstance];
 
     self.callbackId = command.callbackId;
+    self.registrationActive = YES;
+    self.registrationGeneration++;
+    self.lastFCMToken = nil;
+    self.apnsRegistered = NO;
+    self.firebaseConfigured = [FIRApp defaultApp] != nil;
+    self.fcmEnabled = self.firebaseConfigured && ![settings voipEnabled];
+    if (self.fcmEnabled) {
+        self.fcmTopics = [NSMutableSet set];
+        for (id topic in settings.fcmTopics) {
+            NSString *name = [self normalizedTopic:topic];
+            if (name) {
+                [self.fcmTopics addObject:name];
+            } else {
+                [self reportFCMError:nil message:@"Invalid FCM topic."];
+            }
+        }
+        [FIRMessaging messaging].delegate = self;
+        [FIRMessaging messaging].autoInitEnabled = YES;
+    } else if (self.firebaseConfigured && [FIRMessaging messaging].delegate == self) {
+        [FIRMessaging messaging].delegate = nil;
+    }
 
     if ([settings voipEnabled]) {
         [self.commandDelegate runInBackground:^ {
@@ -163,6 +310,15 @@
 - (void)didRegisterForRemoteNotificationsWithDeviceToken:(NSNotification *)notification {
     NSData *deviceToken = notification.object;
 
+    if (self.fcmEnabled) {
+        [FIRMessaging messaging].APNSToken = deviceToken;
+        self.apnsRegistered = deviceToken.length > 0;
+        if (self.registrationActive) {
+            [self requestFCMToken];
+        }
+        return;
+    }
+
     if (self.callbackId == nil) {
         NSLog(@"[PushPlugin] An unexpected case was triggered where the callbackId is missing during the register for remote notification. (device token: %@)", deviceToken);
         return;
@@ -171,6 +327,58 @@
     NSLog(@"[PushPlugin] Successfully registered device for remote notification. (device token: %@)", deviceToken);
 
     [self registerWithToken:[self convertTokenToString:deviceToken]];
+}
+
+- (void)requestFCMToken {
+    NSUInteger generation = self.registrationGeneration;
+    [[FIRMessaging messaging] tokenWithCompletion:^(NSString *token, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!self.registrationActive || generation != self.registrationGeneration) {
+                return;
+            }
+            if (error) {
+                [self reportFCMError:error message:@"Unable to fetch FCM token."];
+            } else {
+                [self registerWithFCMToken:token];
+            }
+        });
+    }];
+}
+
+- (void)messaging:(FIRMessaging *)messaging didReceiveRegistrationToken:(NSString *)fcmToken {
+    NSUInteger generation = self.registrationGeneration;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (generation == self.registrationGeneration) {
+            [self registerWithFCMToken:fcmToken];
+        }
+    });
+}
+
+- (void)registerWithFCMToken:(NSString *)token {
+    // Firebase may refresh its token before APNs registration or before JS is ready.
+    if (!self.fcmEnabled || !self.registrationActive || !self.callbackId ||
+        !self.apnsRegistered || !token.length || [token isEqualToString:self.lastFCMToken]) {
+        return;
+    }
+    self.lastFCMToken = token;
+    [self registerWithToken:token];
+    for (NSString *name in self.fcmTopics) {
+        NSUInteger generation = self.registrationGeneration;
+        [[FIRMessaging messaging] subscribeToTopic:name completion:^(NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (error && self.registrationActive && generation == self.registrationGeneration) {
+                    [self reportFCMError:error message:@"Unable to subscribe to FCM topic."];
+                }
+            });
+        }];
+    }
+}
+
+- (void)reportFCMError:(NSError *)error message:(NSString *)message {
+    NSString *errorMessage = error ? [NSString stringWithFormat:@"%@ - %@", message, error.localizedDescription] : message;
+    CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errorMessage];
+    [result setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:result callbackId:self.callbackId];
 }
 
 - (NSString *)convertTokenToString:(NSData *)deviceToken {
@@ -208,11 +416,16 @@
     }
 
     NSLog(@"[PushPlugin] Failed to register for remote notification with error: %@", error);
-    [self failWithMessage:self.callbackId withMsg:@"Failed to register for remote notification." withError:error];
+    if (self.fcmEnabled) {
+        [self reportFCMError:error message:@"Failed to register for remote notification."];
+    } else {
+        [self failWithMessage:self.callbackId withMsg:@"Failed to register for remote notification." withError:error];
+    }
 }
 
 - (void)didReceiveRemoteNotification:(NSNotification *)notification {
     NSDictionary *userInfo = notification.userInfo[@"userInfo"];
+    [self recordFCMMessage:userInfo];
 
     NSLog(@"[PushPlugin] Received remote notification (userInfo: %@)", userInfo);
 
@@ -342,6 +555,7 @@
 
     self.notificationMessage = [modifiedUserInfo copy];
     self.isForeground = YES;
+    [self recordFCMMessage:originalUserInfo];
 
     UNNotificationPresentationOptions presentationOption = UNNotificationPresentationOptionNone;
 
@@ -371,6 +585,7 @@
     UIApplicationState applicationState = [UIApplication sharedApplication].applicationState;
     NSNumber *applicationStateNumber = @((int)applicationState);
     NSDictionary *originalUserInfo = response.notification.request.content.userInfo;
+    [self recordFCMMessage:originalUserInfo];
     NSMutableDictionary *modifiedUserInfo = [originalUserInfo mutableCopy];
     [modifiedUserInfo setObject:applicationStateNumber forKey:@"applicationState"];
     [modifiedUserInfo setObject:response.actionIdentifier forKey:@"actionCallback"];
@@ -592,10 +807,17 @@
     }
 }
 
+- (void)recordFCMMessage:(NSDictionary *)userInfo {
+    id proxyEnabled = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"FirebaseAppDelegateProxyEnabled"];
+    if (self.fcmEnabled && proxyEnabled && ![proxyEnabled boolValue]) {
+        [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
+    }
+}
+
 - (void)registerWithToken:(NSString *)token {
     NSMutableDictionary* message = [NSMutableDictionary dictionaryWithCapacity:2];
     [message setObject:token forKey:@"registrationId"];
-    [message setObject:@"APNS" forKey:@"registrationType"];
+    [message setObject:self.fcmEnabled ? @"FCM" : @"APNS" forKey:@"registrationType"];
 
     // Send result to trigger 'registration' event but keep callback
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
@@ -706,7 +928,9 @@
                 if (granted || self.forceRegister) {
                     NSLog(@"[PushPlugin] Notification permissions granted.");
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [[UIApplication sharedApplication] registerForRemoteNotifications];
+                        if (self.registrationActive) {
+                            [[UIApplication sharedApplication] registerForRemoteNotifications];
+                        }
                     });
                 } else {
                     NSLog(@"[PushPlugin] Notification permissions denied.");
@@ -744,7 +968,9 @@
                     if (granted || self.forceRegister) {
                         NSLog(@"[PushPlugin] New notification permissions granted.");
                         dispatch_async(dispatch_get_main_queue(), ^{
-                            [[UIApplication sharedApplication] registerForRemoteNotifications];
+                            if (self.registrationActive) {
+                                [[UIApplication sharedApplication] registerForRemoteNotifications];
+                            }
                         });
                     } else {
                         NSLog(@"[PushPlugin] User denied new notification permissions.");
@@ -753,7 +979,9 @@
             } else {
                 NSLog(@"[PushPlugin] All requested permissions were processed.");
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [[UIApplication sharedApplication] registerForRemoteNotifications];
+                    if (self.registrationActive) {
+                        [[UIApplication sharedApplication] registerForRemoteNotifications];
+                    }
                 });
             }
         }
@@ -798,6 +1026,9 @@
 }
 
 - (void)dealloc {
+    if (self.firebaseConfigured && [FIRMessaging messaging].delegate == self) {
+        [FIRMessaging messaging].delegate = nil;
+    }
     self.previousNotification = nil;
     self.launchNotification = nil;
     self.coldstart = NO;

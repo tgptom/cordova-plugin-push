@@ -110,6 +110,16 @@ describe('phonegap-plugin-push', () => {
           done();
         }, 100);
       });
+
+      it('should pass iOS topic options unchanged to native initialization', (done) => {
+        options.ios = { alert: true, topics: ['news', 'updates'] };
+        execSpy.and.callFake((win, fail, service, action, args) => {
+          expect(action).toEqual('init');
+          expect(args).toEqual([options]);
+          done();
+        });
+        PushNotification.init(options);
+      });
     });
 
     describe('on "registration" event', () => {
@@ -120,6 +130,33 @@ describe('phonegap-plugin-push', () => {
         const push = PushNotification.init(options);
         push.on('registration', (data) => {
           expect(data.registrationId).toEqual(1);
+          done();
+        });
+      });
+
+      it('should preserve iOS FCM registration and token refresh payloads', (done) => {
+        const tokens = [
+          { registrationId: 'initial-fcm-token', registrationType: 'FCM' },
+          { registrationId: 'refreshed-fcm-token', registrationType: 'FCM' }
+        ];
+        execSpy.and.callFake((win) => tokens.forEach(win));
+        const received = [];
+        const push = PushNotification.init(options);
+        push.on('registration', (data) => {
+          received.push(data);
+          if (received.length === tokens.length) {
+            expect(received).toEqual(tokens);
+            done();
+          }
+        });
+      });
+
+      it('should preserve APNS registration payloads', (done) => {
+        const token = { registrationId: 'apns-device-token', registrationType: 'APNS' };
+        execSpy.and.callFake((win) => win(token));
+        const push = PushNotification.init(options);
+        push.on('registration', (data) => {
+          expect(data).toEqual(token);
           done();
         });
       });
@@ -204,6 +241,30 @@ describe('phonegap-plugin-push', () => {
         push.on('error', (e) => {
           expect(e).toEqual(jasmine.any(Error));
           expect(e.message).toEqual('something went wrong');
+          done();
+        });
+      });
+
+      it('should continue delivering registration and notification events after an FCM error', (done) => {
+        const token = { registrationId: 'retry-fcm-token', registrationType: 'FCM' };
+        const notification = {
+          message: 'FCM message',
+          additionalData: { foreground: true, coldstart: false, 'gcm.message_id': 'message-id' }
+        };
+        execSpy.and.callFake((win, fail) => {
+          fail('Unable to fetch FCM token.');
+          win(token);
+          win(notification);
+        });
+        const push = PushNotification.init(options);
+        const errorHandler = jasmine.createSpy();
+        const registrationHandler = jasmine.createSpy();
+        push.on('error', errorHandler);
+        push.on('registration', registrationHandler);
+        push.on('notification', (data) => {
+          expect(errorHandler).toHaveBeenCalledWith(jasmine.any(Error));
+          expect(registrationHandler).toHaveBeenCalledWith(token);
+          expect(data).toEqual(notification);
           done();
         });
       });
