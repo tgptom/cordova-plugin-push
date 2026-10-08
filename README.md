@@ -1,5 +1,7 @@
 # Cordova Plugin Push - MODIFIED!!
-# FCM was removed from iOS platform and FCM version is bumped for Android
+This fork supports FCM on Android and optional FCM on iOS. iOS continues to use APNs directly when no Firebase app is configured. See [iOS setup and migration notes](docs/INSTALLATION.md#ios-fcm-setup).
+
+This variant is versioned as **`7.0.1-ios-fcm.1`** to distinguish it from `7.0.1`. The suffix is a SemVer prerelease identifier; version ranges selecting stable releases do not normally include it.
 # important! this fork is not maintained actively and may and will lag behind master
 
 [![Node CI](https://github.com/havesource/cordova-plugin-push/actions/workflows/ci.yml/badge.svg)](https://github.com/havesource/cordova-plugin-push/actions/workflows/ci.yml) [![Codacy Badge](https://api.codacy.com/project/badge/Grade/422c67b5e70c4a0eadae7b9fc794d3c1)](https://app.codacy.com/gh/havesource/cordova-plugin-push?utm_source=github.com&utm_medium=referral&utm_content=havesource/cordova-plugin-push&utm_campaign=Badge_Grade_Settings)

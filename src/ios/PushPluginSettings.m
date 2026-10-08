@@ -45,10 +45,16 @@
 
 - (void)updateSettingsWithOptions:(NSDictionary *)options {
     for (NSString *key in options) {
+        if ([key isEqualToString:@"topics"]) {
+            self.settingsDictionary[@"fcmTopics"] = [self parseArrayOption:key fromOptions:options withDefault:@[]];
+            continue;
+        }
         if ([self.settingsDictionary objectForKey:key]) {
             // Overrides the default setting if defined and apply the correct formatting based on the key.
             if ([key isEqualToString:@"fcmTopics"]) {
-                self.settingsDictionary[key] = [self parseArrayOption:key fromOptions:options withDefault:nil];
+                if (!options[@"topics"]) {
+                    self.settingsDictionary[key] = [self parseArrayOption:key fromOptions:options withDefault:@[]];
+                }
             } else if ([key isEqualToString:@"categories"]) {
                 self.settingsDictionary[key] = [self parseCategoriesFromOptions:options[key]];
             } else {
