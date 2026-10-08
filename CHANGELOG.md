@@ -1,5 +1,12 @@
 # Change Log
 
+## Unreleased
+
+* Restored optional iOS FCM registration, token refresh, initial topic subscriptions, topic APIs and token deletion using current Firebase Messaging APIs.
+* Preserved direct APNs/VoIP registration, the modern notification/settings architecture, and existing JS notification payloads; Android and common JS implementation are unchanged.
+* Restored the documented `ios.topics` option (`ios.fcmTopics` remains an alias). Topic operations now report errors when FCM is unavailable rather than returning a misleading success.
+* Added iOS Firebase/APNs setup, deployment requirements, migration caveats and device verification steps to the installation guide.
+
 ## 7.0.1
 
 **Overview:**

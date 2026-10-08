@@ -127,31 +127,17 @@ All iOS boolean options can also be specified as `string`
 | `ios.categories` | `Object`  | `{}`    | Optional. The data required in order to enable Action Buttons for iOS. See [Action Buttons on iOS](https://github.com/phonegap/phonegap-plugin-push/blob/master/docs/PAYLOAD.md#action-buttons-1) for more details.                                                                                                                                                              |
 | `ios.critical`   | `boolean` | `false` | Optional. If `true` the device can show up critical alerts. (Possible since iOS 12 with a special entitlement) **Note:** the value you set this option to the first time you call the init method will be how the application always acts. Once this is set programmatically in the init method it can only be changed manually by the user in Settings > Notifications > `App Name`. This is normal iOS behaviour.         |
 
-#### iOS GCM support
+#### iOS FCM support
 
-The following properties are used if you want use GCM on iOS.
+FCM is enabled when a default Firebase app is configured, normally by bundling `GoogleService-Info.plist`. Without Firebase configuration, registration continues to return the APNs token. See [iOS FCM setup](INSTALLATION.md#ios-fcm-setup).
 
 | Attribute        | Type      | Default | Description                                                    |
 | ---------------- | --------- | ------- | -------------------------------------------------------------- |
-| `ios.fcmSandbox` | `boolean` | `false` | Whether to use prod or sandbox GCM setting. Defaults to false. |
-| `ios.topics`     | `array`   | `[]`    | Optional. If the array contains one or more strings each string will be used to subscribe to a FcmPubSub topic. |
+| `ios.topics`     | `array`   | `[]`    | Optional. Subscribe to these FCM topics after token registration. `ios.fcmTopics` is a backward-compatible alias. |
 
-##### How GCM on iOS works.
+Firebase maps the APNs device token to an FCM token. The `registration` event returns `{ registrationId, registrationType: 'FCM' }`, including subsequent token refreshes. Message delivery still uses APNs and the existing `notification` event payload. Firebase detects the APNs environment from the signed app; the obsolete `ios.fcmSandbox` option is not used.
 
-First it is kind of a misnomer as GCM does not send push messages directly to devices running iOS.
-
-What happens is on the device side is that it registers with APNS, then that registration ID is sent to GCM which returns a different GCM specific ID. That is the ID you get from the push plugin `registration` event.
-
-When you send a message to GCM using that ID, what it does is look up the APNS registration ID on it's side and forward the message you sent to GCM on to APSN to deliver to your iOS device.
-
-Make sure that the certificate you build with matches your `fcmSandbox` value.
-
-* If you build your app as development and set `fcmSandbox: false` it will fail.
-* If you build your app as production and set `fcmSandbox: true` it will fail.
-* If you build your app as development and set `fcmSandbox: true` but haven't uploaded the development certs to Google it will fail.
-* If you build your app as production and set `fcmSandbox: false` but haven't uploaded the production certs to Google it will fail.
-
-> Note: The integration between GCM and APNS is a bit finicky. Personally, I feel it is much better to send pushes to Android using GCM and pushes to iOS using APNS which this plugin does support.
+`subscribe` and `unsubscribe` complete after Firebase confirms the operation and report errors through their error callbacks. `unregister(success, error, topics)` only unsubscribes the supplied topics, leaving registration and JS handlers intact. Full `unregister(success, error)` disables Firebase auto-initialization, deletes the FCM token, and unregisters from APNs; call `init` again to re-enable registration. Topic APIs require FCM and return an error in APNs-only or VoIP mode.
 
 #### iOS VoIP Notifications
 

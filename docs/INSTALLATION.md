@@ -53,7 +53,6 @@ E.g.
   <resource-file src="google-services.json" target="/app/google-services.json" />
 </platform>
 ```
-<!---
 By default, on iOS, the plugin will register with APNS. If you want to use FCM on iOS, in the `platform` tag for iOS add the following `resource-file` tag:
 
 ```xml
@@ -61,7 +60,6 @@ By default, on iOS, the plugin will register with APNS. If you want to use FCM o
   <resource-file src="GoogleService-Info.plist" />
 </platform>
 ```
--->
 > Note: if you are using Ionic you may need to specify the SENDER_ID variable in your package.json.
 
 ```json
@@ -190,14 +188,70 @@ Firefox 46+
 
 **System:**
 
-- `Xcode`: `11.0` or greater.
-- `CocoaPods`: `1.8.0` or greater. Preferably `1.9.x`
-- `Ruby`: `2.0.0` or greater.
+- `Xcode`: `26.2` or greater for the default Firebase SDK.
+- `CocoaPods`: `1.12.0` or greater.
+- `Ruby`: a version supported by your installed CocoaPods.
+- iOS deployment target: `15.0` or greater (also applies to APNs-only apps because the Firebase pod is linked).
 
 **Cordova:**
 
 - `cordova-cli`: `10.0.0` or greater.
-- `cordova-ios`: `6.0.0` or greater. Preferably `6.1.x`
+- `cordova-ios`: `6.0.0` or greater; use a maintained release compatible with your Xcode version.
+
+### iOS FCM setup
+
+1. Register an iOS app in the Firebase console using the **exact bundle identifier** of your Cordova app. Download its `GoogleService-Info.plist` and include it in the app bundle using `resource-file`; do not rename it.
+2. In Firebase **Project settings > Cloud Messaging**, upload an APNs authentication key (with the correct Apple team/key IDs), or valid APNs certificates for the environments you use. FCM still delivers iOS messages through APNs.
+3. Enable **Push Notifications** in the Apple App ID and provisioning profile. Verify the signed app's `aps-environment` entitlement, and enable **Background Modes > Remote notifications** for silent/background pushes. The plugin supplies development/release entitlements and the background mode, but cannot configure your Apple account or signing profile.
+4. Set the deployment target and include the Firebase configuration in the application's `config.xml`:
+
+```xml
+<platform name="ios">
+  <preference name="deployment-target" value="15.0" />
+  <resource-file src="GoogleService-Info.plist" />
+</platform>
+```
+
+5. Run `cordova prepare ios` and `cordova build ios` on macOS. Open the generated **`.xcworkspace`**, not `.xcodeproj`, when using Xcode. Initialize after `deviceready`, with notification permissions and any initial topics:
+
+```javascript
+const push = PushNotification.init({
+  android: {},
+  ios: { alert: true, badge: true, sound: true, topics: ['news'] }
+});
+push.on('registration', data => {
+  // Update your backend on initial registration and every token refresh.
+  console.log(data.registrationType, data.registrationId);
+});
+push.on('notification', data => {
+  console.log(data);
+});
+push.on('error', error => {
+  console.error(error);
+});
+```
+
+#### Migration and integration notes
+
+- With no bundled Firebase configuration or preconfigured default Firebase app, iOS continues to emit `registrationType: 'APNS'`. When Firebase is configured, non-VoIP registration emits `registrationType: 'FCM'`; update your backend to store the FCM token, not the old APNs token, and send through [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/send/v1-api). `ios.voip` continues to use PushKit/APNs, never an FCM token.
+- Firebase is configured once, reusing an existing default app. This plugin owns `FIRMessaging.delegate`; coordinate with other Firebase push plugins so they do not replace it. Align their Firebase pod versions with `IOS_FIREBASE_MESSAGING_VERSION` (default **12.19.0**), for example `cordova plugin add cordova-plugin-push --variable IOS_FIREBASE_MESSAGING_VERSION=12.19.0`. Do not install multiple competing push handlers.
+- The default pod raises the deployment target to iOS 15 even for APNs-only apps. Upgrading from the APNs-only fork requires CocoaPods, a compatible macOS/Xcode toolchain, and regenerated platform dependencies. Android's `FCM_VERSION` is separate and unchanged.
+- This integration intentionally uses the token-based Firebase APIs to preserve the existing JS/backend contract. Firebase 12.18+ deprecates these APIs in favor of installation-ID registration. Do **not** enable `FirebaseMessagingInstallationIdEnabled`; FID mode is not compatible with this plugin's FCM-token contract. A future migration will require coordinated backend and plugin changes.
+- Firebase AppDelegate swizzling is left at the application's setting. The plugin explicitly associates the APNs token with Firebase in either mode. If `FirebaseAppDelegateProxyEnabled` is `NO`, it also forwards received messages to Firebase for delivery/analytics reporting. Custom delegates must still forward APNs registration, failure and notification callbacks through the plugin's AppDelegate handlers.
+- No `fcmSandbox` flag is needed: Firebase detects the APNs environment from the signed application. Ensure development and distribution builds both have appropriate APNs credentials.
+- `ios.topics` is supported; `ios.fcmTopics` remains an alias, with `topics` taking precedence. Topic callbacks report actual Firebase success/failure. Topic APIs return errors in APNs-only/VoIP mode.
+- Full `unregister` disables auto-initialization and deletes the FCM token before unregistering APNs. Wait for its success callback before calling `init` to re-enable registration. Topic-only `unregister(success, error, ['news'])` leaves registration and JS handlers active.
+
+#### iOS device verification
+
+- Build a signed Debug app on a physical device with the plist bundled; grant permissions and verify a nonempty FCM `registrationId` and `registrationType: 'FCM'`. Repeat with a distribution/TestFlight build to verify production APNs credentials.
+- Send an FCM HTTP v1 message with an APNs alert payload to that token. Check foreground delivery, background tap, and terminated-app tap; verify the existing `notification` fields and `additionalData.foreground`/`coldstart` flags. Include custom data and action buttons if used by your app.
+- Send a silent APNs payload (`content-available: 1`, APNs push type `background`, priority `5`) and call `push.finish(success, error, notId)` after processing. Background delivery is best-effort and may be suppressed after a user force-quits the app.
+- Verify initial topic subscription, explicit subscribe/unsubscribe and topic-only unregister callbacks by sending to the topic; direct-token notifications must still arrive after topic-only unregister.
+- Fully unregister, verify success and absence of further registration events, then reinitialize and update the backend with the new token. Exercise offline registration followed by restored connectivity, reinstall/token rotation, denied permissions and both Firebase swizzling settings.
+- Remove the plist (and any other default Firebase initialization) and rebuild to verify `registrationType: 'APNS'` and direct APNs delivery. Smoke-test Android registration/message receipt and topic APIs with the unchanged Android configuration.
+
+Simulator-injected notifications can check payload/UI routing, but do not prove Firebase/APNs registration, signing or production delivery. Real-device verification and a macOS native build are required; the repository's JS tests cannot exercise Firebase or APNs.
 
 ### Bitcode
 
@@ -220,7 +274,7 @@ To install CocoaPods, please follow the installation instructions [here](https:/
 
 If you are upgrading from an older version, it might be best to uninstall first the older version and remove the `~/.cocoapods/` directory.
 
-In this fork, iOS uses APNS only and does not include a Firebase Messaging CocoaPod dependency.
+The plugin links the `FirebaseMessaging` pod (including its FirebaseCore dependency) using `IOS_FIREBASE_MESSAGING_VERSION`. Runtime Firebase configuration remains optional; see [iOS FCM setup](#ios-fcm-setup).
 
 #### Common CocoaPod Installation issues
 
