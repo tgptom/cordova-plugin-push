@@ -115,21 +115,20 @@
             }
         }
         dispatch_group_t group = dispatch_group_create();
-        NSUInteger generation = self.registrationGeneration;
+        NSMutableSet<NSString *> *registeredTopics = self.fcmTopics;
+        NSCountedSet<NSString *> *pendingUnsubscriptions = self.pendingTopicUnsubscriptions;
         __block NSError *topicError = nil;
         for (NSString *topic in topics) {
             NSString *name = [self normalizedTopic:topic];
-            [self.pendingTopicUnsubscriptions addObject:name];
+            [pendingUnsubscriptions addObject:name];
             dispatch_group_enter(group);
             [[FIRMessaging messaging] unsubscribeFromTopic:name completion:^(NSError *error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (generation == self.registrationGeneration) {
-                        [self.pendingTopicUnsubscriptions removeObject:name];
-                    }
+                    [pendingUnsubscriptions removeObject:name];
                     if (error) {
                         topicError = error;
-                    } else if (generation == self.registrationGeneration) {
-                        [self.fcmTopics removeObject:name];
+                    } else {
+                        [registeredTopics removeObject:name];
                     }
                     dispatch_group_leave(group);
                 });
@@ -200,24 +199,24 @@
         [self failWithMessage:command.callbackId withMsg:@"Invalid FCM topic." withError:nil];
         return;
     }
-    NSUInteger generation = self.registrationGeneration;
+    // Capture topic state so completions cannot mutate a later init's subscriptions.
+    NSMutableSet<NSString *> *registeredTopics = self.fcmTopics;
+    NSCountedSet<NSString *> *pendingUnsubscriptions = self.pendingTopicUnsubscriptions;
     if (!subscribe) {
-        [self.pendingTopicUnsubscriptions addObject:topic];
+        [pendingUnsubscriptions addObject:topic];
     }
     void (^completion)(NSError *) = ^(NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!subscribe && generation == self.registrationGeneration) {
-                [self.pendingTopicUnsubscriptions removeObject:topic];
+            if (!subscribe) {
+                [pendingUnsubscriptions removeObject:topic];
             }
             if (error) {
                 [self failWithMessage:command.callbackId withMsg:@"Unable to update FCM topic subscription." withError:error];
             } else {
-                if (generation == self.registrationGeneration) {
-                    if (subscribe) {
-                        [self.fcmTopics addObject:topic];
-                    } else {
-                        [self.fcmTopics removeObject:topic];
-                    }
+                if (subscribe) {
+                    [registeredTopics addObject:topic];
+                } else {
+                    [registeredTopics removeObject:topic];
                 }
                 [self successWithMessage:command.callbackId withMsg:subscribe ? @"subscribed" : @"unsubscribed"];
             }
